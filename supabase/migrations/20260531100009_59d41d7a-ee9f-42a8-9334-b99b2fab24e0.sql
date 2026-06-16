@@ -1,0 +1,1 @@
+GRANT EXECUTE ON FUNCTION public.is_course_owner(uuid) TO authenticated;
