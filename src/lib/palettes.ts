@@ -20,13 +20,74 @@ export const PALETTE_STORAGE_KEY = "taskmate.palette";
 // "auto" or numeric index
 export const PALETTE_EVENT = "taskmate:palette-change";
 export const PALETTE_TICK_MS = 60_000;
+const PALETTE_FADE_MS = 14_000;
+
+let paletteAnimationId: number | undefined;
+
+function parseHslTriplet(value: string): [number, number, number] | null {
+  const parts = value.trim().match(/-?\d+(?:\.\d+)?/g)?.map(Number);
+  if (!parts || parts.length < 3) return null;
+  return [parts[0], parts[1], parts[2]];
+}
+
+function readTint(root: HTMLElement, name: string, fallback: string) {
+  return parseHslTriplet(getComputedStyle(root).getPropertyValue(name)) ?? parseHslTriplet(fallback)!;
+}
+
+function mixHue(from: number, to: number, progress: number) {
+  const delta = ((to - from + 540) % 360) - 180;
+  return (from + delta * progress + 360) % 360;
+}
+
+function mixHsl(from: [number, number, number], to: [number, number, number], progress: number) {
+  const ease = 1 - Math.pow(1 - progress, 3);
+  return [
+    mixHue(from[0], to[0], ease),
+    from[1] + (to[1] - from[1]) * ease,
+    from[2] + (to[2] - from[2]) * ease,
+  ] as [number, number, number];
+}
+
+function writeTint(root: HTMLElement, name: string, value: [number, number, number]) {
+  root.style.setProperty(name, `${value[0].toFixed(1)} ${value[1].toFixed(1)}% ${value[2].toFixed(1)}%`);
+}
 
 export function applyPalette(index: number) {
   const p = PALETTES[index % PALETTES.length];
   const root = document.documentElement;
-  root.style.setProperty("--bg-tint-1", p.tints[0]);
-  root.style.setProperty("--bg-tint-2", p.tints[1]);
-  root.style.setProperty("--bg-tint-3", p.tints[2]);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (paletteAnimationId) window.cancelAnimationFrame(paletteAnimationId);
+
+  if (reducedMotion) {
+    root.style.setProperty("--bg-tint-1", p.tints[0]);
+    root.style.setProperty("--bg-tint-2", p.tints[1]);
+    root.style.setProperty("--bg-tint-3", p.tints[2]);
+    return;
+  }
+
+  const start = [
+    readTint(root, "--bg-tint-1", p.tints[0]),
+    readTint(root, "--bg-tint-2", p.tints[1]),
+    readTint(root, "--bg-tint-3", p.tints[2]),
+  ];
+  const target = p.tints.map((tint) => parseHslTriplet(tint)!) as [[number, number, number], [number, number, number], [number, number, number]];
+  const startedAt = performance.now();
+
+  const animate = (now: number) => {
+    const progress = Math.min((now - startedAt) / PALETTE_FADE_MS, 1);
+    writeTint(root, "--bg-tint-1", mixHsl(start[0], target[0], progress));
+    writeTint(root, "--bg-tint-2", mixHsl(start[1], target[1], progress));
+    writeTint(root, "--bg-tint-3", mixHsl(start[2], target[2], progress));
+
+    if (progress < 1) {
+      paletteAnimationId = window.requestAnimationFrame(animate);
+    } else {
+      paletteAnimationId = undefined;
+    }
+  };
+
+  paletteAnimationId = window.requestAnimationFrame(animate);
 }
 
 export function getAutoPaletteIndex() {
