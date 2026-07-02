@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Loader2, BookOpen } from "lucide-react";
-import { lovable } from "@/integrations/lovable";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -35,17 +35,17 @@ export default function Signup() {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    const { error, redirected } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+      },
     });
-    if (redirected) return;
     if (error) {
       toast.error(error.message);
       setGoogleLoading(false);
-    } else {
-      toast.success("Welcome!");
-      navigate("/dashboard");
     }
+    // Browser will redirect to Google
   };
 
   return (
